@@ -14,8 +14,18 @@
 		// Production deploys must also define POLICY_AUD and TEAM_DOMAIN.
 		// TEAM_DOMAIN may be the base Access URL or the full /cdn-cgi/access/certs URL.
 		// The worker now fails closed outside local development if Access is not configured.
+		//
+		// DOMAINS: comma-separated list of domains with Cloudflare Email Routing → Worker.
+		// DECONFLICTED 2026-06-13 (Email-agent Phase 2d): scoped to websignalytics only.
+		// Personal mail (me@christopherlawson.ca, ILD, lawsonandchristopher, Gmail) is now
+		// owned solely by the local Python JMAP daemon; lawsonandchristopher.com MX is on
+		// Fastmail, so its Email Routing is inert and removed here.
 		"DOMAINS": "websignalytics.com",
-		"EMAIL_ADDRESSES": ["chris@websignalytics.com"]
+		"EMAIL_ADDRESSES": [
+			"chris@websignalytics.com",
+			"hello@websignalytics.com",
+			"billing@websignalytics.com"
+		]
 	},
 	"send_email": [
 		{
@@ -30,6 +40,19 @@
 			"preview_bucket_name": "agentic-inbox"
 		}
 	],
+	// KV namespace for IMAP poll state cursors (JMAP queryState, Gmail historyId)
+	"kv_namespaces": [
+		{
+			"binding": "POLL_STATE",
+			"id": "54ca6fb2381442e3b9b64c11358a0b6e"
+		}
+	],
+	// Cron trigger DISABLED 2026-06-13 (Phase 2d): the poller no longer handles any
+	// personal/Gmail accounts, so there is nothing to poll. websignalytics mail
+	// arrives via Cloudflare Email Routing (push), not cron.
+	"triggers": {
+		"crons": []
+	},
 	"ai": {
 		"binding": "AI"
 	},

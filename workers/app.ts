@@ -6,7 +6,7 @@ import { routeAgentRequest } from "agents";
 import { Hono } from "hono";
 import { jwtVerify, createRemoteJWKSet } from "jose";
 import { createRequestHandler } from "react-router";
-import { app as apiApp, receiveEmail } from "./index";
+import { app as apiApp, receiveEmail, scheduled as scheduledHandler } from "./index";
 import { EmailMCP } from "./mcp";
 import type { Env } from "./types";
 
@@ -45,7 +45,7 @@ const app = new Hono<{ Bindings: Env }>();
 // Cloudflare Access JWT validation middleware (production only)
 app.use("*", async (c, next) => {
 	// Skip validation in development
-	if (import.meta.env.DEV) {
+	if (import.meta.env.DEV || c.env.DEV_BYPASS === "true") {
 		return next();
 	}
 
@@ -107,7 +107,7 @@ app.all("*", (c) => {
 	});
 });
 
-// Export the Hono app as the default export with an email handler
+// Export the Hono app as the default export with email and scheduled handlers
 export default {
 	fetch: app.fetch,
 	async email(
@@ -123,5 +123,10 @@ export default {
 			// Swallowing the error would silently drop the email.
 			throw e;
 		}
+	},
+	// Cron trigger: fires every 5 minutes to poll Fastmail (JMAP) and Gmail (REST API)
+	// for accounts that can't use Cloudflare Email Routing as MX.
+	async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext) {
+		await scheduledHandler(event, env, ctx);
 	},
 };

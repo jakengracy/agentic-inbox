@@ -410,3 +410,21 @@ async function receiveEmail(event: { raw: ReadableStream; rawSize: number }, env
 }
 
 export { app, receiveEmail };
+
+// ── Scheduled Handler (Cron Trigger) ─────────────────────────────────────────
+// Fired every 5 minutes by Cloudflare Cron Trigger (see wrangler.jsonc triggers.crons).
+// Polls Fastmail via JMAP and Gmail via REST API for new emails in accounts that
+// can't use Cloudflare Email Routing as the MX record.
+export async function scheduled(
+	event: ScheduledEvent,
+	env: Env,
+	ctx: ExecutionContext,
+): Promise<void> {
+	// Import lazily to avoid affecting startup time of the main HTTP handler
+	const { pollAllAccounts } = await import("./lib/poller");
+	ctx.waitUntil(
+		pollAllAccounts(env).catch((e: Error) =>
+			console.error("[scheduled] Poll cycle failed:", e.message, e.stack),
+		),
+	);
+}

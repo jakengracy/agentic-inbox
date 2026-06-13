@@ -15,4 +15,28 @@ export default defineConfig({
     reactRouter(),
     tsconfigPaths(),
   ],
+  // Ensure a single copy of React and TanStack Query is used across client
+  // and SSR environments. Without this, React context is lost between
+  // environments causing "useContext null" and "No QueryClient set" errors.
+  resolve: {
+    dedupe: [
+      "react",
+      "react-dom",
+      "react/jsx-runtime",
+      "react/jsx-dev-runtime",
+      "@tanstack/react-query",
+      "@tanstack/query-core",
+    ],
+  },
+  environments: {
+    ssr: {
+      optimizeDeps: {
+        include: [
+          "react/jsx-dev-runtime",
+          "react/jsx-runtime",
+          "@tanstack/react-query",
+        ],
+      },
+    },
+  },
 });

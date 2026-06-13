@@ -21,7 +21,14 @@ Return ONLY "NO" if it is a normal email (even if angry, confused, or containing
 
 Respond with exactly one word: YES or NO.`;
 
-export async function isPromptInjection(ai: Ai, bodyHtml: string | null | undefined): Promise<boolean> {
+// Return type distinguishes three outcomes:
+//   false          — scanner ran, email is clean, proceed with auto-draft
+//   'injection'    — scanner ran and detected a prompt injection attempt
+//   'scanner_error'— Workers AI call failed; treated as blocked for safety
+export async function isPromptInjection(
+	ai: Ai,
+	bodyHtml: string | null | undefined,
+): Promise<false | 'injection' | 'scanner_error'> {
 	if (!bodyHtml) return false;
 	
 	const plainText = stripHtmlToText(bodyHtml).trim();
@@ -44,17 +51,24 @@ export async function isPromptInjection(ai: Ai, bodyHtml: string | null | undefi
 		const result = (response?.response || "NO").trim().toUpperCase();
 		
 		if (result.includes("YES")) {
-			console.warn("Prompt injection detected in incoming email, blocking auto-draft");
-			return true;
+			console.warn("[isPromptInjection] Injection detected in email body, blocking auto-draft");
+			return 'injection';
 		}
 		
 		return false;
 	} catch (e) {
-		console.error("Prompt injection scanner failed, skipping auto-draft:", (e as Error).message);
-		// Fail closed: treat scanner failures as potential injection to avoid
-		// auto-drafting replies to emails we couldn't verify.
-		// The email is still stored in the inbox — only auto-draft is skipped.
-		return true;
+		// Log full error details so we can diagnose Workers AI failures in Cloudflare logs.
+		// Check: dash.cloudflare.com → Workers & Pages → agentic-inbox → Logs
+		// Also verify model availability at: dash.cloudflare.com → AI → Workers AI
+		const err = e as Error;
+		console.error("[isPromptInjection] Workers AI call failed — failing closed (auto-draft blocked):", {
+			errorType: err?.constructor?.name ?? typeof e,
+			message: err?.message ?? String(e),
+			stack: err?.stack ?? "(no stack)",
+			emailLength: plainText.length,
+			emailPreview: plainText.slice(0, 100),
+		});
+		return 'scanner_error';
 	}
 }
 

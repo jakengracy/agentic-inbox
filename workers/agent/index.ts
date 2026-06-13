@@ -347,11 +347,14 @@ export class EmailAgent extends AIChatAgent<any> {
 		try {
 			const email = (await stub.getEmail(emailData.emailId)) as EmailFull | null;
 			if (email?.body) {
-				const isInjection = await isPromptInjection(env.AI, email.body);
-				if (isInjection) {
-					console.warn("Skipping auto-draft due to detected prompt injection:", emailData.emailId);
+				const injectionResult = await isPromptInjection(env.AI, email.body);
+				if (injectionResult !== false) {
+					const agentMessage = injectionResult === 'scanner_error'
+						? "⚠️ Auto-draft skipped: the prompt injection scanner failed (Workers AI error). Check Cloudflare Worker logs for details. The email is in your inbox — you can draft a reply manually."
+						: "⚠️ Auto-draft blocked: this email appears to contain prompt injection or malicious instructions.";
+
+					console.warn(`Skipping auto-draft (reason: ${injectionResult}):`, emailData.emailId);
 					
-					// Log to agent chat so the user knows why it skipped
 					const newMessages = [
 						{
 							id: crypto.randomUUID(),
@@ -363,13 +366,12 @@ export class EmailAgent extends AIChatAgent<any> {
 						{
 							id: crypto.randomUUID(),
 							role: "assistant" as const,
-							content: "⚠️ Blocked auto-draft creation: the email appears to contain prompt injection or malicious instructions.",
+							content: agentMessage,
 							createdAt: new Date(),
-							parts: [{ type: "text" as const, text: "⚠️ Blocked auto-draft creation: the email appears to contain prompt injection or malicious instructions." }],
+							parts: [{ type: "text" as const, text: agentMessage }],
 						},
 					];
 					await this.persistMessages([...this.messages, ...newMessages]);
-					
 					return;
 				}
 				
@@ -395,9 +397,13 @@ export class EmailAgent extends AIChatAgent<any> {
 			// could plant an injection in an earlier email in the thread
 			// that gets included in the agent's prompt.
 			if (threadContext) {
-				const threadInjection = await isPromptInjection(env.AI, threadContext);
-				if (threadInjection) {
-					console.warn("Skipping auto-draft due to prompt injection in thread context:", emailData.threadId);
+				const threadInjectionResult = await isPromptInjection(env.AI, threadContext);
+				if (threadInjectionResult !== false) {
+					const agentMessage = threadInjectionResult === 'scanner_error'
+						? "⚠️ Auto-draft skipped: the prompt injection scanner failed on the thread context (Workers AI error). Check Cloudflare Worker logs for details."
+						: "⚠️ Auto-draft blocked: the thread context appears to contain prompt injection or malicious instructions.";
+
+					console.warn(`Skipping auto-draft due to thread context (reason: ${threadInjectionResult}):`, emailData.threadId);
 					const newMessages = [
 						{
 							id: crypto.randomUUID(),
@@ -409,9 +415,9 @@ export class EmailAgent extends AIChatAgent<any> {
 						{
 							id: crypto.randomUUID(),
 							role: "assistant" as const,
-							content: "Blocked auto-draft creation: the thread context appears to contain prompt injection or malicious instructions.",
+							content: agentMessage,
 							createdAt: new Date(),
-							parts: [{ type: "text" as const, text: "Blocked auto-draft creation: the thread context appears to contain prompt injection or malicious instructions." }],
+							parts: [{ type: "text" as const, text: agentMessage }],
 						},
 					];
 					await this.persistMessages([...this.messages, ...newMessages]);
